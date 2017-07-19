@@ -9,11 +9,11 @@ angular
 	'$scope', '$name', '$enable', '$rpc', '$rpchelpers', '$utils', '$alerts', '$modals',
 	'$fileSettings', '$activeInclude', '$waitingExclude', '$pageSize', '$getErrorStatus',
 	// for document title
-	'$rootScope',
+	'$rootScope', '$filter',
 function(
 	scope, name, enable, rpc, rhelpers, utils, alerts, modals,
 	fsettings, activeInclude, waitingExclude, pageSize, getErrorStatus,
-	rootScope
+	rootScope, filter
 ) {
 
 	scope.name = name;	 // default UI name
@@ -26,6 +26,7 @@ function(
 	scope.active = [], scope.waiting = [], scope.stopped = [];
 	scope.gstats = {};
 	scope.hideLinkedMetadata = true;
+	scope.propFilter = "";
 
 	// pause the download
 	// d: the download ctx
@@ -82,7 +83,9 @@ function(
 		// HACK to make sure an angular digest is not running, as only one can happen at a time, and confirm is a blocking
 		// call so an rpc response can also trigger a digest call
 		setTimeout(function() {
-			if (!noConfirm && !confirm("Remove %s and associated meta-data?".replace("%s", d.name))) {
+			if (!noConfirm && !confirm(
+				filter('translate')('Remove {{name}} and associated meta-data?',
+					{ name: d.name }))) {
 				return;
 			}
 
@@ -318,7 +321,7 @@ function(
 		}
 		else if (scope.filterSpeed) {
 			downloads = _.filter(scope.active, function (e) {
-				return +e.uploadSpeed || +e.downloadSpeed;
+				return +e.uploadSpeed || +e.downloadSpeed;
 			});
 		}
 		if (scope.filterWaiting) {
@@ -398,12 +401,24 @@ function(
 				animCollapsed: true,
 				files: [],
 			};
+			if (d.verifiedLength) {
+				ctx.verifiedLength = d.verifiedLength;
+				ctx.status = "verifing";
+			}
+			if (d.verifyIntegrityPending) {
+				ctx.verifyIntegrityPending = d.verifyIntegrityPending;
+				ctx.status = "verifyPending";
+			}
 		}
 		else {
 		    if (ctx.gid !== d.gid)
 		        ctx.files = [];
 			ctx.dir = d.dir;
 			ctx.status = d.status;
+			if(d.verifiedLength)
+				ctx.status = "verifing";
+			if(d.verifyIntegrityPending)
+				ctx.status = "verifyPending"
 			ctx.errorCode = d.errorCode;
 			ctx.gid = d.gid;
 			ctx.followedBy = (d.followedBy && d.followedBy.length == 1
@@ -427,8 +442,18 @@ function(
 				ctx.completedLength = d.completedLength;
 				ctx.fmtCompletedLength = utils.fmtsize(d.completedLength);
 			}
-			if (ctx.uploadLength !== d.uploadength) {
-				ctx.uploadLength = d.uploadlength;
+			if (!d.verifiedLength) {
+				delete ctx.verifiedLength
+			} else if (ctx.verifiedLength !== d.verifiedLength) {
+				ctx.verifiedLength = d.verifiedLength;
+			}
+			if (!d.verifyIntegrityPending) {
+				delete ctx.verifyIntegrityPending
+			} else if (ctx.verifyIntegrityPending !== d.verifyIntegrityPending) {
+				ctx.verifyIntegrityPending = d.verifyIntegrityPending;
+			}
+			if (ctx.uploadLength !== d.uploadLength) {
+				ctx.uploadLength = d.uploadLength;
 				ctx.fmtUploadLength = utils.fmtsize(d.uploadLength);
 			}
 			if (ctx.pieceLength !== d.pieceLength) {
@@ -521,6 +546,8 @@ function(
 				return "progress-bar-warning";
 			case "active":
 				return "active";
+			case "verifing":
+				return "progress-bar-warning";
 			case "complete":
 				return "progress-bar-success";
 			default:
@@ -530,11 +557,25 @@ function(
 
 	// gets the progress in percentages
 	scope.getProgress = function(d) {
-		var percentage = (d.completedLength / d.totalLength)*100 || 0;
+		var percentage = 0
+		if (d.verifiedLength)
+			percentage = (d.verifiedLength / d.totalLength) * 100 || 0;
+		else
+			percentage = (d.completedLength / d.totalLength) * 100 || 0;
 		percentage = percentage.toFixed(2);
 		if(!percentage) percentage = 0;
 
 		return percentage;
+	};
+
+	// gets the upload ratio
+	scope.getRatio = function(d) {
+		var ratio = 0
+		ratio = (d.uploadLength / d.completedLength) || 0;
+		ratio = ratio.toFixed(2);
+		if(!ratio) ratio = 0;
+
+		return ratio;
 	};
 
 	// gets the type for the download as classified by the aria2 rpc calls
@@ -596,5 +637,18 @@ function(
 	scope.moveUp = function (d) {
 	    rpc.once('changePosition', [d.gid, -1, 'POS_CUR']);
 	};
+}])
+.filter('objFilter', function(){
+	return function(input, filter) {
+		input = input || {};
+		var out = {};
 
-}]);
+		for(key in input) {
+			if (key.startsWith(filter)){
+				out[key] = input[key];
+			}
+		}
+
+		return out;
+	};
+});

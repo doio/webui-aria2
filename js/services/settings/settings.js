@@ -271,7 +271,8 @@ angular.module('webui.services.settings', [])
 
   "header": {
     val: '',
-    desc: "Append HEADER to HTTP request header."
+    desc: "Append HEADER to HTTP request header.",
+    multiline: true,
   },
 
   "http-accept-gzip": {
@@ -492,7 +493,7 @@ angular.module('webui.services.settings', [])
 
   "pause": {
     desc: "Pause download after added. This option is effective only when --enable-rpc=true is given. Default: false",
-    val: false,
+    val: "false",
     options: ["true", "false"],
   },
 
